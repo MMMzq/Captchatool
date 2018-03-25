@@ -266,7 +266,7 @@ class Code_tool:
         print(out.get_shape())
 
         #   定义操作
-        sigmoid=tf.nn.sigmoid(out,name='sigmoid')
+        sigmoid=tf.nn.softmax(out,name='sigmoid')
         loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=label_b, logits=out),name='loss')
         train_op = tf.train.AdamOptimizer().minimize(loss,name='train')
         max_logits_indexs = tf.argmax(out, 2)
@@ -289,14 +289,15 @@ class Code_tool:
         self.__startwork(epochs)
         #   开始训练
         with tf.Session() as sess:
+            print(tf.train.latest_checkpoint(self.__out_path))
             if retrain:
                 self.init_cnn()
                 save = tf.train.Saver()
                 sess.run(tf.global_variables_initializer())
                 step = 0
             else:
-                save = tf.train.Saver()
                 cp = tf.train.latest_checkpoint(self.__out_path)
+                save = tf.train.import_meta_graph(cp+'.meta')
                 save.restore(sess, cp)
                 step = int(sess.run('g_v:0'))
             test_img, test_label = self.__generate_test_batch()
@@ -306,8 +307,7 @@ class Code_tool:
                 except NullDataException:
                     break
 
-                sess.run('train',feed_dict={'i_p:0': img, 'l_p:0': label, 'k_p:0': 0.75})
-                loss = sess.run(['loss:0'], feed_dict={'i_p:0': img, 'l_p:0': label, 'k_p:0': 0.75})
+                loss,_ = sess.run(['loss:0','train'], feed_dict={'i_p:0': img, 'l_p:0': label, 'k_p:0': 0.75})
                 print('步数为：{}\tloss:{}'.format(step, loss))
                 if step % 10 == 0:
                     actual_ac = sess.run('accuracy:0',
@@ -318,28 +318,30 @@ class Code_tool:
                 step += 1
 
             # 保存
-            global_step = tf.assign('g_v:0', step)
-            sess.run(global_step)
+            g_step=tf.get_default_graph().get_tensor_by_name('g_v:0')
+            tf.assign(g_step, step,name='update')
+            sess.run('update:0')
             self.__endwork()
+            print('保存模型中请等待!')
             save.save(sess,self.__out_path+'model',global_step=step)
-        return
+            return
 
     def infer(self):
-        # test_img, test_label = self.__generate_test_batch()
-        # img_b = tf.placeholder(tf.float32, [None, self.height, self.width, self.channel])
-        # keed = tf.placeholder(tf.float32)
-        # global_step = tf.Variable(0)
-        # #   定义操作
-        # out = self.def_cnn(img_b, keed)
-        # # out=tf.nn.sigmoid(out)
-
         with tf.Session() as sess:
-            save=tf.train.import_meta_graph('static/output/model-800.meta')
+            test,label=self.__generate_test_batch()
             cp = tf.train.latest_checkpoint(self.__out_path)
+            save = tf.train.import_meta_graph(cp+'.meta')
             save.restore(sess, cp)
-            print('ok')
-            # r=sess.run(out,feed_dict={img_b:test_img,keed:1.})
-            # print(r[0,:,:])
+            result=sess.run('sigmoid:0',feed_dict={'i_p:0':test,'k_p:0':1.0})
+            count=0
+            for i in range(result.shape[0]):
+                text=self.__vec2text(result[i,:,:])
+                l=self.__vec2text(label[i,:,:])
+                print('{}\t{}'.format(text,l))
+                if text==l:
+                    count+=1
+            print(count)
+
 
 
 
