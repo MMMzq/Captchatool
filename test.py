@@ -11,6 +11,6 @@ ct = Code_tool(s,
                'static/test/',
                'static/t/',
                lambda s: s.split('_')[1].split('.')[0],batch_size=64)
-ct.train(30,0.9,False)
+ct.train(30,0.9)
 # ct.infer()
 # print(73.0/123.0)

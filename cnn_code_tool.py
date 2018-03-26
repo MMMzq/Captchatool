@@ -246,22 +246,28 @@ class Code_tool:
         conv_y2=tf.nn.dropout(conv_y2,keed)
         print(conv_y2.get_shape())
 
+        w_y3 = tf.Variable(tf.truncated_normal([5,5,64,64]))
+        b_y3 = tf.Variable(tf.truncated_normal([64]))
+        conv_y3 = self.__con2d(conv_y2,w_y3,b_y3)
+        conv_y3=tf.nn.relu(conv_y3)
+        conv_y3 =self.__max_pool_2x2(conv_y3)
+        print(conv_y3.get_shape())
+
+
         # shape=(batch_size,height/4,width/4,64,in_channel_size)
-        shape = conv_y2.get_shape().as_list()
+        shape = conv_y3.get_shape().as_list()
         w_f1 = tf.Variable(tf.truncated_normal([shape[1] * shape[2] * shape[3], 1024]))
         b_f1 = tf.Variable(tf.truncated_normal([1024]))
-        dense = tf.reshape(conv_y2, [-1, w_f1.get_shape().as_list()[0]])
+        dense = tf.reshape(conv_y3, [-1, w_f1.get_shape().as_list()[0]])
         dense = tf.add(tf.matmul(dense, w_f1), b_f1)
         dense = tf.nn.relu(dense)
         # dense=tf.nn.dropout(dense,keep)
         print(dense.get_shape())
-        # 此时dense形状为=(height*width*channel,1024)
 
         w_out = tf.Variable(
             tf.truncated_normal([1024, self.__max_captcha_len * self.__charset_len]))
         b_out = tf.Variable(tf.truncated_normal([self.__max_captcha_len * self.__charset_len]))
         out = tf.add(tf.matmul(dense, w_out), b_out)
-        print(out.get_shape())
         out = tf.reshape(out, [-1, self.__max_captcha_len, self.__charset_len])
         print(out.get_shape())
 
@@ -289,7 +295,6 @@ class Code_tool:
         self.__startwork(epochs)
         #   开始训练
         with tf.Session() as sess:
-            print(tf.train.latest_checkpoint(self.__out_path))
             if retrain:
                 self.init_cnn()
                 save = tf.train.Saver()
@@ -315,6 +320,7 @@ class Code_tool:
                     print('步数为：{}\t命中率:{}'.format(step, actual_ac))
                     if actual_ac >= target_ac:
                         break
+                break
                 step += 1
 
             # 保存
@@ -341,9 +347,6 @@ class Code_tool:
                 if text==l:
                     count+=1
             print(count)
-
-
-
 
 
 class NullDataException(Exception):
