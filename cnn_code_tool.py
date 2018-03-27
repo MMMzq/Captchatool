@@ -5,9 +5,16 @@ import numpy as np
 import traceback
 import tensorflow as tf
 import threading
-import time
 
 lock = threading.Lock()
+'''
+1.不要关注命中率，请把关注力集中到loss是否变小上，
+    通常loss，和命中率是负相关的，loss降低一般意味着的命中率的提升！
+2.在相同的模型中条件下，模型的大小，实际很大程度取决于图片的大小，和输入到全连接处是shape的大小，
+    例如输入到全连接层shape为(batch_size,15,40,1)和(batch_size,8,20,1),后者的模型将比前者小3/2
+    其实，输入的图片越大，到全连接层的shape就会越大，
+    所以想要模型变小，就要尽量减小输入到全连接层shape的大小，或者取消全连接层。
+'''
 
 
 class Code_tool:
@@ -23,7 +30,7 @@ class Code_tool:
     __threadpool = None
     __max_captcha_len = None
     __charset_len = None
-    __fnl=None
+    __fnl = None
     width = None
     height = None
     channel = None
@@ -52,7 +59,7 @@ class Code_tool:
         self.__filename_queue = Queue(self.__batch_size * batch_multiple)
         self.__file_queue = Queue(self.__batch_size * batch_multiple)
         self.__data_queue = Queue(self.__batch_size)
-        self.__fnl=os.listdir(self.__input_path)
+        self.__fnl = os.listdir(self.__input_path)
         img = Image.open(self.__input_path + self.__fnl[0])
         # 获取图片形状
         shape = np.array(img).shape
@@ -64,9 +71,9 @@ class Code_tool:
             self.channel = shape[2]
         # 获取验证码长度
         self.__max_captcha_len = len(self.__label_resolve_func(self.__fnl[0]))
+        # self.__startwork(10)
 
-
-    def __startwork(self , epochs):
+    def __startwork(self, epochs):
 
         '''
         -----------------------启动线程-------------------------
@@ -105,7 +112,7 @@ class Code_tool:
             for _ in range(epochs):
                 for i in filename_list:
                     # print(1)
-                    self.__filename_queue.put(i, )
+                    self.__filename_queue.put(i)
         except BaseException:
             msg = traceback.format_exc()
             print(msg)
@@ -173,19 +180,19 @@ class Code_tool:
                 self.__file_queue.put(None)
 
     def __do_add_data_queue(self, batch_img, batch_label):
-        batch_label = np.reshape(batch_label, [-1, self.__max_captcha_len, self.__charset_len])
-        batch_img = np.reshape(batch_img, [-1, self.height, self.width, self.channel])
+        batch_label = np.reshape(batch_label, [-1, self.__max_captcha_len * self.__charset_len])
+        batch_img = np.reshape(batch_img, [-1, self.height * self.width * self.channel])
         self.__data_queue.put({'batch_img': batch_img, 'batch_label': batch_label}, )
 
     # 该方法不一定会返回等同与batch_size参数的batch,例如最后一批可能只有10张图片组成
-    def __generate_next_batch(self):
+    def generate_next_batch(self):
         data = self.__data_queue.get()
         if data == None:
             raise NullDataException('空数据，原因所有数据已被读取')
         return data['batch_img'], data['batch_label']
 
-    # 重要:test文件夹和train文件夹一定不要相同！！！否则会影响测试命中率,而且测试集不宜太大
-    def __generate_test_batch(self):
+    # 重要:test文件夹和train文件夹一定不要相同！！！否则会影响测试命中率,而且测试集不宜太大，太多可能会导致OOM
+    def generate_test_batch(self):
         batch_img = np.array([])
         batch_label = np.array([])
 
@@ -201,8 +208,8 @@ class Code_tool:
                 batch_img = np.append(batch_img, img_raw)
                 batch_label = np.append(batch_label, label_raw)
 
-        batch_img = np.reshape(batch_img, [-1, self.height, self.width, self.channel])
-        batch_label = np.reshape(batch_label, [-1, self.__max_captcha_len, self.__charset_len])
+        batch_label = np.reshape(batch_label, [-1, self.__max_captcha_len * self.__charset_len])
+        batch_img = np.reshape(batch_img, [-1, self.height * self.width * self.channel])
         return batch_img, batch_label
 
     def __text2vec(self, text):
@@ -210,7 +217,8 @@ class Code_tool:
         for i in range(self.__max_captcha_len):
             index = self.__charset.find(text[i])
             vec[i, index] = 1
-        return vec.flatten()
+        vec = vec.flatten()
+        return vec
 
     def __vec2text(self, vec):
         vec = np.reshape(vec, [self.__max_captcha_len, self.__charset_len])
@@ -222,74 +230,78 @@ class Code_tool:
 
     '''
     ---------------------cnn定义--------------------------
+    
     '''
+
     def init_cnn(self):
         # 定义占位符，变量
-        img_b = tf.placeholder(tf.float32, [None, self.height, self.width, self.channel],name='i_p')
-        label_b = tf.placeholder(tf.float32,name='l_p')
-        keed = tf.placeholder(tf.float32,name='k_p')
-        global_step = tf.Variable(0,name='g_v')
+        img_b = tf.placeholder(tf.float32, [None, self.height * self.width * self.channel],
+                               name='i_p')
+        label_b = tf.placeholder(tf.float32, name='l_p')
+        keed = tf.placeholder(tf.float32, name='k_p')
+        global_step = tf.Variable(0, name='g_v')
+        img_b = tf.reshape(img_b, shape=[-1, self.height, self.width, self.channel])
+        w_alpha = 0.01
+        b_alpha = 0.1
+
+
 
         # 定义cnn布局
-        w_y1 = tf.Variable(tf.truncated_normal([5, 5, self.channel, 32]))
-        b_y1 = tf.Variable(tf.truncated_normal([32]))
-        conv_y1 = self.__con2d(img_b, w_y1, b_y1)
-        conv_y1 = tf.nn.relu(conv_y1)
-        conv_y1 = self.__max_pool_2x2(conv_y1)
-        print(conv_y1.get_shape())
+        def conv2(input, ksize, padding='SAME'):
+            w = tf.Variable(w_alpha * tf.random_normal(ksize))
+            b = tf.Variable(b_alpha * tf.random_normal([ksize[3]]))
+            return tf.nn.bias_add(tf.nn.conv2d(input, w, strides=[1, 1, 1, 1], padding=padding), b)
 
-        w_y2 = tf.Variable(tf.truncated_normal([5, 5, 32, 64]))
-        b_y2 = tf.Variable(tf.truncated_normal([64]))
-        conv_y2 = self.__con2d(conv_y1, w_y2, b_y2)
-        conv_y2 = tf.nn.relu(conv_y2)
-        conv_y2 = self.__max_pool_2x2(conv_y2)
-        conv_y2=tf.nn.dropout(conv_y2,keed)
-        print(conv_y2.get_shape())
+        h = conv2(img_b, [3, 3, self.channel, 32])
+        h = tf.nn.relu(h)
+        h = self.__max_pool_2x2(h)
+        h = tf.nn.dropout(h, keed)
 
-        w_y3 = tf.Variable(tf.truncated_normal([5,5,64,64]))
-        b_y3 = tf.Variable(tf.truncated_normal([64]))
-        conv_y3 = self.__con2d(conv_y2,w_y3,b_y3)
-        conv_y3=tf.nn.relu(conv_y3)
-        conv_y3 =self.__max_pool_2x2(conv_y3)
-        print(conv_y3.get_shape())
+        h = conv2(h, [3, 3, 32, 64])
+        h = tf.nn.relu(h)
+        h = self.__max_pool_2x2(h)
+        h = tf.nn.dropout(h, keed)
 
+        h = conv2(h, [3, 3, 64, 64])
+        h = tf.nn.relu(h)
+        h = self.__max_pool_2x2(h)
+        h = tf.nn.dropout(h, keed)
+        print(h.get_shape())
 
-        # shape=(batch_size,height/4,width/4,64,in_channel_size)
-        shape = conv_y3.get_shape().as_list()
-        w_f1 = tf.Variable(tf.truncated_normal([shape[1] * shape[2] * shape[3], 1024]))
-        b_f1 = tf.Variable(tf.truncated_normal([1024]))
-        dense = tf.reshape(conv_y3, [-1, w_f1.get_shape().as_list()[0]])
+        shape = h.get_shape().as_list()
+        w_f1 = tf.Variable(w_alpha * tf.truncated_normal([shape[1] * shape[2] * shape[3], 1024]))
+        b_f1 = tf.Variable(b_alpha * tf.truncated_normal([1024]))
+        dense = tf.reshape(h, [-1, w_f1.get_shape().as_list()[0]])
         dense = tf.add(tf.matmul(dense, w_f1), b_f1)
         dense = tf.nn.relu(dense)
-        # dense=tf.nn.dropout(dense,keep)
+        dense = tf.nn.dropout(dense, keed)
         print(dense.get_shape())
 
         w_out = tf.Variable(
-            tf.truncated_normal([1024, self.__max_captcha_len * self.__charset_len]))
-        b_out = tf.Variable(tf.truncated_normal([self.__max_captcha_len * self.__charset_len]))
-        out = tf.add(tf.matmul(dense, w_out), b_out)
-        out = tf.reshape(out, [-1, self.__max_captcha_len, self.__charset_len])
+            w_alpha * tf.truncated_normal([1024, self.__max_captcha_len * self.__charset_len]))
+        b_out = tf.Variable(
+            b_alpha * tf.truncated_normal([self.__max_captcha_len * self.__charset_len]))
+        out = tf.add(tf.matmul(dense, w_out), b_out, 'out')
         print(out.get_shape())
 
         #   定义操作
-        sigmoid=tf.nn.softmax(out,name='sigmoid')
-        loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=label_b, logits=out),name='loss')
-        train_op = tf.train.AdamOptimizer().minimize(loss,name='train')
-        max_logits_indexs = tf.argmax(out, 2)
+        # sigmoid=tf.nn.softmax(out,name='sigmoid')
+        loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=label_b, logits=out),
+                              name='loss')
+        train_op = tf.train.AdamOptimizer().minimize(loss, name='train')
+        predict = tf.reshape(out, [-1, self.__max_captcha_len, self.__charset_len])
+        max_logits_indexs = tf.argmax(predict, 2, 'max')
+        label_b = tf.reshape(label_b, [-1, self.__max_captcha_len, self.__charset_len])
         max_label_indexs = tf.argmax(label_b, 2)
         correct_pred = tf.equal(max_label_indexs, max_logits_indexs)
-        accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32),name='accuracy')
-
-
-    def __con2d(self, x, w, b):
-        return tf.nn.bias_add(tf.nn.conv2d(x, w, strides=[1, 1, 1, 1], padding='SAME'), b)
+        accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32), name='accuracy')
 
     def __max_pool_2x2(self, x):
         return tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
 
     # 该方法请不要在多线程环境运行,请确保同一时间内只有一个线程运行该方法
     def train(self, epochs, target_ac=1., retrain=True):
-        if (self.__input_path == None or self.__test_input_path == None):
+        if self.__input_path or self.__test_input_path :
             print('__input_path或__test_input_path缺失')
             return
         self.__startwork(epochs)
@@ -302,51 +314,61 @@ class Code_tool:
                 step = 0
             else:
                 cp = tf.train.latest_checkpoint(self.__out_path)
-                save = tf.train.import_meta_graph(cp+'.meta')
+                save = tf.train.import_meta_graph(cp + '.meta')
                 save.restore(sess, cp)
                 step = int(sess.run('g_v:0'))
-            test_img, test_label = self.__generate_test_batch()
+            test_img, test_label = self.generate_test_batch()
             while True:
                 try:
-                    img, label = self.__generate_next_batch()
+                    img, label = self.generate_next_batch()
                 except NullDataException:
                     break
 
-                loss,_ = sess.run(['loss:0','train'], feed_dict={'i_p:0': img, 'l_p:0': label, 'k_p:0': 0.75})
+                loss, _ = sess.run(['loss:0', 'train'],
+                                   feed_dict={'i_p:0': img, 'l_p:0': label, 'k_p:0': 0.75})
                 print('步数为：{}\tloss:{}'.format(step, loss))
                 if step % 10 == 0:
+                    # 这里的命中率不代表真正的命中率，例如，模型推测出某个标签是1234，但正确的标签是1235，按照常理来讲这里并不相等，但是对于这里命中率来说，命中率是百分之75.也就是说这里的命中是针对单个字符的
                     actual_ac = sess.run('accuracy:0',
-                                         feed_dict={'i_p:0': test_img, 'l_p:0': test_label,'k_p:0': 1.})
+                                         feed_dict={'i_p:0': test_img, 'l_p:0': test_label,
+                                                    'k_p:0': 1.})
                     print('步数为：{}\t命中率:{}'.format(step, actual_ac))
                     if actual_ac >= target_ac:
                         break
-                break
                 step += 1
-
             # 保存
-            g_step=tf.get_default_graph().get_tensor_by_name('g_v:0')
-            tf.assign(g_step, step,name='update')
+            g_step = tf.get_default_graph().get_tensor_by_name('g_v:0')
+            tf.assign(g_step, step, name='update')
             sess.run('update:0')
             self.__endwork()
             print('保存模型中请等待!')
-            save.save(sess,self.__out_path+'model',global_step=step)
+            save.save(sess, self.__out_path + 'model', global_step=step)
+            print('完成')
             return
 
     def infer(self):
         with tf.Session() as sess:
-            test,label=self.__generate_test_batch()
+            test, label = self.generate_test_batch()
             cp = tf.train.latest_checkpoint(self.__out_path)
-            save = tf.train.import_meta_graph(cp+'.meta')
+            save = tf.train.import_meta_graph(cp + '.meta')
             save.restore(sess, cp)
-            result=sess.run('sigmoid:0',feed_dict={'i_p:0':test,'k_p:0':1.0})
-            count=0
+            result = sess.run('out:0', feed_dict={'i_p:0': test, 'k_p:0': 1.0})
+            count = 0
+            step = 0
+            print(result.shape)
+            label = np.reshape(label, [-1, self.__max_captcha_len, self.__charset_len])
+            result = np.reshape(result, [-1, self.__max_captcha_len, self.__charset_len])
+            print(result.shape)
+
             for i in range(result.shape[0]):
-                text=self.__vec2text(result[i,:,:])
-                l=self.__vec2text(label[i,:,:])
-                print('{}\t{}'.format(text,l))
-                if text==l:
-                    count+=1
+                la = self.__vec2text(result[i, :, :])
+                lb = self.__vec2text(label[i, :, :])
+                print(la + '\t' + lb)
+                if la == lb:
+                    count += 1
+                step += 1
             print(count)
+            print(step)
 
 
 class NullDataException(Exception):

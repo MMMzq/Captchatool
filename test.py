@@ -5,12 +5,13 @@ import itertools
 from threading import Lock
 import os
 from cnn_code_tool import Code_tool
-s='1234567890qwertyuiopasdfghjklzxcvbnm'
-ct = Code_tool(s,
+s='1234567890'
+s1='qwertyuiopasdfghjklzxcvbnm'
+s2='QWERTYUIOPASDFGHJKLZXCVBNM'
+ct = Code_tool(s+s1+s2,
                'static/output/',
-               'static/test/',
-               'static/t/',
-               lambda s: s.split('_')[1].split('.')[0],batch_size=64)
-ct.train(30,0.9)
-# ct.infer()
-# print(73.0/123.0)
+               'static/data/train/',
+               'static/data/test/',
+               lambda s: s.split('_')[2].split('.')[0],batch_size=64)
+# ct.train(30,0.98,False)
+ct.infer()
