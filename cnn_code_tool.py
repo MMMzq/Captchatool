@@ -225,7 +225,7 @@ class Code_tool:
         return vec
 
     def __vec2text(self, vec):
-        vec = np.reshape(vec, [self.__max_captcha_len, self.__charset_len])
+        # vec.shape 要等于[captcha_len,charset_len]，否则会不正确
         indexs = vec.argmax(axis=1)
         text = ''
         for i in indexs:
@@ -244,14 +244,14 @@ class Code_tool:
         tf.constant(self.channel,name='channel')
         tf.constant(self.__max_captcha_len,name='captcha_len')
         tf.constant(self.__charset_len,name='charset_len')
-        tf.constant(self.format,name='format')
+        tf.constant(self.format,name='format',dtype=tf.string)
         img_b = tf.placeholder(tf.float32, [None, self.height * self.width * self.channel],name='i_p')
         label_b = tf.placeholder(tf.float32, name='l_p')
         keed = tf.placeholder(tf.float32, name='k_p')
         global_step = tf.Variable(0, name='g_v')
         img_b = tf.reshape(img_b, shape=[-1, self.height, self.width, self.channel])
-        w_alpha =1
-        b_alpha =1
+        w_alpha =0.01
+        b_alpha =0.1
 
         def conv2(input, ksize, padding='SAME'):
             w = tf.Variable(w_alpha * tf.random_normal(ksize))
@@ -295,7 +295,6 @@ class Code_tool:
         print(out.get_shape())
 
         #   定义操作
-        # sigmoid=tf.nn.softmax(out,name='sigmoid')
         loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=label_b, logits=out),
                               name='loss')
         train_op = tf.train.AdamOptimizer().minimize(loss, name='train')
@@ -365,10 +364,9 @@ class Code_tool:
         return self.sess
 
     def infer(self,fn):
-        sess=self.__init_session
+        sess=self.__init_session()
         h,w,c,captcha_len,charset_len=sess.run(['height:0','width:0','channel:0','captcha_len:0','charset_len:0'])
         with Image.open(fn) as f:
-            tf.image.decode_png()
             img_array = np.array(f)
             img = np.reshape(img_array,[1,h*w*c])
             result=sess.run('out:0', feed_dict={'i_p:0': img, 'k_p:0': 1.0})
@@ -376,8 +374,10 @@ class Code_tool:
             return self.__vec2text(result)
 
     def infet_bytes(self, bytes):
-        sess=self.__init_session
+        sess=self.__init_session()
         h,w,c,captcha_len,charset_len,format=sess.run(['height:0','width:0','channel:0','captcha_len:0','charset_len:0','format:0'])
+        # 这里format是一个bytes对象所以要转换
+        format=str(format,encoding='utf-8')
         if format =='PNG':
             decode=tf.image.decode_png(bytes, c)
         elif format == 'JPEG':
