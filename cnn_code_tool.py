@@ -6,7 +6,7 @@ import traceback
 import tensorflow as tf
 import threading
 from tensorflow import keras
-import tensorflow.keras
+
 lock = threading.Lock()
 '''
 1.不要关注命中率，请把关注力集中到loss是否变小上，
@@ -31,9 +31,11 @@ class Code_tool:
     __max_captcha_len = None
     __charset_len = None
     __fnl = None
+    __isinit=False
     width = None
     height = None
     channel = None
+    format = None
     # -----------------------------------------------
     # 利用列表的append,remove的原子操作来在多线程下来计数
     __filename_queue_handle_count = []
@@ -62,7 +64,9 @@ class Code_tool:
             self.__file_queue = Queue(self.__batch_size * batch_multiple)
             self.__data_queue = Queue(self.__batch_size)
             self.__fnl = os.listdir(self.__input_path)
-            img = Image.open(self.__input_path + self.__fnl[0])
+            fn=self.__input_path + self.__fnl[0]
+            img = Image.open(fn)
+            self.format=img.format
             # 获取图片形状
             shape = np.array(img).shape
             self.height = shape[0]
@@ -240,8 +244,8 @@ class Code_tool:
         tf.constant(self.channel,name='channel')
         tf.constant(self.__max_captcha_len,name='captcha_len')
         tf.constant(self.__charset_len,name='charset_len')
-        img_b = tf.placeholder(tf.float32, [None, self.height * self.width * self.channel],
-                               name='i_p')
+        tf.constant(self.format,name='format')
+        img_b = tf.placeholder(tf.float32, [None, self.height * self.width * self.channel],name='i_p')
         label_b = tf.placeholder(tf.float32, name='l_p')
         keed = tf.placeholder(tf.float32, name='k_p')
         global_step = tf.Variable(0, name='g_v')
@@ -256,8 +260,6 @@ class Code_tool:
         def max_pool_2x2(x):
             return tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
 
-        def norm2(x):
-            return tf.nn.lrn(x,4,1.0,0.001/9,0.75)
 
         h = conv2(img_b, [3, 3, self.channel, 32])
         h = tf.nn.relu(h)
@@ -350,40 +352,44 @@ class Code_tool:
             save.save(sess, self.__out_path + 'model', global_step=step)
             print('完成')
 
-    # def infer(self):
-    #     with tf.Session() as sess:
-    #         test, label = self.generate_test_batch()
-    #         cp = tf.train.latest_checkpoint(self.__out_path)
-    #         save = tf.train.import_meta_graph(cp + '.meta')
-    #         save.restore(sess, cp)
-    #         result = sess.run('out:0', feed_dict={'i_p:0': test, 'k_p:0': 1.0})
-    #         count = 0
-    #         step = 0
-    #         label = np.reshape(label, [-1, self.__max_captcha_len, self.__charset_len])
-    #         result = np.reshape(result, [-1, self.__max_captcha_len, self.__charset_len])
-    #         for i in range(result.shape[0]):
-    #             la = self.__vec2text(result[i, :, :])
-    #             lb = self.__vec2text(label[i, :, :])
-    #             print(la + '\t' + lb)
-    #             if la == lb:
-    #                 count += 1
-    #             step += 1
-    #         print(count)
-    #         print(step)
 
-    def infer(self,fn):
-        with tf.Session() as sess:
+    def __init_session(self):
+        if not self.__isinit:
+            lock.acquire()
+            self.sess=tf.Session()
             cp = tf.train.latest_checkpoint(self.__out_path)
             save = tf.train.import_meta_graph(cp + '.meta')
-            save.restore(sess, cp)
-            h,w,c,captcha_len,charset_len=sess.run(['height:0','width:0','channel:0','captcha_len:0','charset_len:0'])
-            with Image.open(fn) as f:
-                tf.image.decode_png()
-                img_array = np.array(f)
-                img = np.reshape(img_array,[1,h*w*c])
-                result=sess.run('out:0', feed_dict={'i_p:0': img, 'k_p:0': 1.0})
-                result = np.reshape(result, [captcha_len,charset_len])
-                return self.__vec2text(result)
+            save.restore(self.sess, cp)
+            self.__isinit = True
+            lock.release()
+        return self.sess
+
+    def infer(self,fn):
+        sess=self.__init_session
+        h,w,c,captcha_len,charset_len=sess.run(['height:0','width:0','channel:0','captcha_len:0','charset_len:0'])
+        with Image.open(fn) as f:
+            tf.image.decode_png()
+            img_array = np.array(f)
+            img = np.reshape(img_array,[1,h*w*c])
+            result=sess.run('out:0', feed_dict={'i_p:0': img, 'k_p:0': 1.0})
+            result = np.reshape(result, [captcha_len,charset_len])
+            return self.__vec2text(result)
+
+    def infet_bytes(self, bytes):
+        sess=self.__init_session
+        h,w,c,captcha_len,charset_len,format=sess.run(['height:0','width:0','channel:0','captcha_len:0','charset_len:0','format:0'])
+        if format =='PNG':
+            decode=tf.image.decode_png(bytes, c)
+        elif format == 'JPEG':
+            decode=tf.image.decode_jpeg(bytes,c)
+        else:
+            raise  TypeError('不支持的格式,请切换别的方法')
+        result=sess.run(decode)
+        img_array = np.array(result)
+        img = np.reshape(img_array,[1,h*w*c])
+        result=sess.run('out:0', feed_dict={'i_p:0': img, 'k_p:0': 1.0})
+        result = np.reshape(result, [captcha_len,charset_len])
+        return self.__vec2text(result)
 
 class NullDataException(Exception):
     pass
