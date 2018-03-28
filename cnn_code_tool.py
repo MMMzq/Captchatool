@@ -5,7 +5,8 @@ import numpy as np
 import traceback
 import tensorflow as tf
 import threading
-
+from tensorflow import keras
+import tensorflow.keras
 lock = threading.Lock()
 '''
 1.不要关注命中率，请把关注力集中到loss是否变小上，
@@ -27,7 +28,6 @@ class Code_tool:
     __filename_queue = None
     __file_queue = None
     __data_queue = None
-    __threadpool = None
     __max_captcha_len = None
     __charset_len = None
     __fnl = None
@@ -44,42 +44,42 @@ class Code_tool:
     def __init__(self, charset, out_path, input_path=None, test_input_path=None,
                  label_resolve_func=None, batch_size=32,
                  max_thread_size=16, batch_multiple=4, data_handle_n=3):
-        if label_resolve_func is None:
-            self.__label_resolve_func = lambda s: s
-        else:
-            self.__label_resolve_func = label_resolve_func
-        self.__input_path = input_path
-        self.__test_input_path = test_input_path
         self.__out_path = out_path
         self.__charset = charset
         self.__charset_len = len(charset)
-        self.__batch_size = batch_size
-        self.__data_handle_n = data_handle_n
-        self.__max_thread_size = max_thread_size
-        self.__filename_queue = Queue(self.__batch_size * batch_multiple)
-        self.__file_queue = Queue(self.__batch_size * batch_multiple)
-        self.__data_queue = Queue(self.__batch_size)
-        self.__fnl = os.listdir(self.__input_path)
-        img = Image.open(self.__input_path + self.__fnl[0])
-        # 获取图片形状
-        shape = np.array(img).shape
-        self.height = shape[0]
-        self.width = shape[1]
-        if len(shape) == 2:
-            self.channel = 1
-        else:
-            self.channel = shape[2]
-        # 获取验证码长度
-        self.__max_captcha_len = len(self.__label_resolve_func(self.__fnl[0]))
-        # self.__startwork(10)
+        # 判断是否有路径，如果没有，将不能使用train方法！
+        if input_path  and test_input_path :
+            self.__input_path = input_path
+            self.__test_input_path = test_input_path
+            if label_resolve_func is None:
+                self.__label_resolve_func = lambda s: s
+            else:
+                self.__label_resolve_func = label_resolve_func
+            self.__batch_size = batch_size
+            self.__data_handle_n = data_handle_n
+            self.__max_thread_size = max_thread_size
+            self.__filename_queue = Queue(self.__batch_size * batch_multiple)
+            self.__file_queue = Queue(self.__batch_size * batch_multiple)
+            self.__data_queue = Queue(self.__batch_size)
+            self.__fnl = os.listdir(self.__input_path)
+            img = Image.open(self.__input_path + self.__fnl[0])
+            # 获取图片形状
+            shape = np.array(img).shape
+            self.height = shape[0]
+            self.width = shape[1]
+            if len(shape) == 2:
+                self.channel = 1
+            else:
+                self.channel = shape[2]
+            # 获取验证码长度
+            self.__max_captcha_len = len(self.__label_resolve_func(self.__fnl[0]))
 
+        '''
+       -----------------------启动线程-------------------------
+       将有一个文件名队列处理线程，两个组装数据队列处理者线程，其余剩下的线程都是文件队列处理者
+       注意对应的处理者请不要超过对应队列的大小
+       '''
     def __startwork(self, epochs):
-
-        '''
-        -----------------------启动线程-------------------------
-        将有一个文件名队列处理线程，两个组装数据队列处理者线程，其余剩下的线程都是文件队列处理者
-        注意对应的处理者请不要超过对应队列的大小
-        '''
         lock.acquire()
         self.__filename_queue_handle_count.append(None)
         t = threading.Thread(target=self.__filename_queue_handle, daemon=True,
@@ -232,41 +232,49 @@ class Code_tool:
     ---------------------cnn定义--------------------------
     
     '''
-
     def init_cnn(self):
-        # 定义占位符，变量
+        # 定义占位符，变量,常量
+        #这里的常量用于以后推测验证码时使用
+        tf.constant(self.height,name='height')
+        tf.constant(self.width,name='width')
+        tf.constant(self.channel,name='channel')
+        tf.constant(self.__max_captcha_len,name='captcha_len')
+        tf.constant(self.__charset_len,name='charset_len')
         img_b = tf.placeholder(tf.float32, [None, self.height * self.width * self.channel],
                                name='i_p')
         label_b = tf.placeholder(tf.float32, name='l_p')
         keed = tf.placeholder(tf.float32, name='k_p')
         global_step = tf.Variable(0, name='g_v')
         img_b = tf.reshape(img_b, shape=[-1, self.height, self.width, self.channel])
-        w_alpha = 0.01
-        b_alpha = 0.1
+        w_alpha =1
+        b_alpha =1
 
-
-
-        # 定义cnn布局
         def conv2(input, ksize, padding='SAME'):
             w = tf.Variable(w_alpha * tf.random_normal(ksize))
             b = tf.Variable(b_alpha * tf.random_normal([ksize[3]]))
             return tf.nn.bias_add(tf.nn.conv2d(input, w, strides=[1, 1, 1, 1], padding=padding), b)
+        def max_pool_2x2(x):
+            return tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
+
+        def norm2(x):
+            return tf.nn.lrn(x,4,1.0,0.001/9,0.75)
 
         h = conv2(img_b, [3, 3, self.channel, 32])
         h = tf.nn.relu(h)
-        h = self.__max_pool_2x2(h)
+        h = max_pool_2x2(h)
         h = tf.nn.dropout(h, keed)
 
         h = conv2(h, [3, 3, 32, 64])
         h = tf.nn.relu(h)
-        h = self.__max_pool_2x2(h)
+        h = max_pool_2x2(h)
         h = tf.nn.dropout(h, keed)
 
         h = conv2(h, [3, 3, 64, 64])
         h = tf.nn.relu(h)
-        h = self.__max_pool_2x2(h)
+        h = max_pool_2x2(h)
         h = tf.nn.dropout(h, keed)
         print(h.get_shape())
+
 
         shape = h.get_shape().as_list()
         w_f1 = tf.Variable(w_alpha * tf.truncated_normal([shape[1] * shape[2] * shape[3], 1024]))
@@ -296,12 +304,10 @@ class Code_tool:
         correct_pred = tf.equal(max_label_indexs, max_logits_indexs)
         accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32), name='accuracy')
 
-    def __max_pool_2x2(self, x):
-        return tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
 
     # 该方法请不要在多线程环境运行,请确保同一时间内只有一个线程运行该方法
     def train(self, epochs, target_ac=1., retrain=True):
-        if self.__input_path or self.__test_input_path :
+        if self.__input_path is None or self.__test_input_path is None:
             print('__input_path或__test_input_path缺失')
             return
         self.__startwork(epochs)
@@ -323,9 +329,8 @@ class Code_tool:
                     img, label = self.generate_next_batch()
                 except NullDataException:
                     break
-
                 loss, _ = sess.run(['loss:0', 'train'],
-                                   feed_dict={'i_p:0': img, 'l_p:0': label, 'k_p:0': 0.75})
+                                   feed_dict={'i_p:0': img, 'l_p:0': label, 'k_p:0': 1})
                 print('步数为：{}\tloss:{}'.format(step, loss))
                 if step % 10 == 0:
                     # 这里的命中率不代表真正的命中率，例如，模型推测出某个标签是1234，但正确的标签是1235，按照常理来讲这里并不相等，但是对于这里命中率来说，命中率是百分之75.也就是说这里的命中是针对单个字符的
@@ -344,32 +349,41 @@ class Code_tool:
             print('保存模型中请等待!')
             save.save(sess, self.__out_path + 'model', global_step=step)
             print('完成')
-            return
 
-    def infer(self):
+    # def infer(self):
+    #     with tf.Session() as sess:
+    #         test, label = self.generate_test_batch()
+    #         cp = tf.train.latest_checkpoint(self.__out_path)
+    #         save = tf.train.import_meta_graph(cp + '.meta')
+    #         save.restore(sess, cp)
+    #         result = sess.run('out:0', feed_dict={'i_p:0': test, 'k_p:0': 1.0})
+    #         count = 0
+    #         step = 0
+    #         label = np.reshape(label, [-1, self.__max_captcha_len, self.__charset_len])
+    #         result = np.reshape(result, [-1, self.__max_captcha_len, self.__charset_len])
+    #         for i in range(result.shape[0]):
+    #             la = self.__vec2text(result[i, :, :])
+    #             lb = self.__vec2text(label[i, :, :])
+    #             print(la + '\t' + lb)
+    #             if la == lb:
+    #                 count += 1
+    #             step += 1
+    #         print(count)
+    #         print(step)
+
+    def infer(self,fn):
         with tf.Session() as sess:
-            test, label = self.generate_test_batch()
             cp = tf.train.latest_checkpoint(self.__out_path)
             save = tf.train.import_meta_graph(cp + '.meta')
             save.restore(sess, cp)
-            result = sess.run('out:0', feed_dict={'i_p:0': test, 'k_p:0': 1.0})
-            count = 0
-            step = 0
-            print(result.shape)
-            label = np.reshape(label, [-1, self.__max_captcha_len, self.__charset_len])
-            result = np.reshape(result, [-1, self.__max_captcha_len, self.__charset_len])
-            print(result.shape)
-
-            for i in range(result.shape[0]):
-                la = self.__vec2text(result[i, :, :])
-                lb = self.__vec2text(label[i, :, :])
-                print(la + '\t' + lb)
-                if la == lb:
-                    count += 1
-                step += 1
-            print(count)
-            print(step)
-
+            h,w,c,captcha_len,charset_len=sess.run(['height:0','width:0','channel:0','captcha_len:0','charset_len:0'])
+            with Image.open(fn) as f:
+                tf.image.decode_png()
+                img_array = np.array(f)
+                img = np.reshape(img_array,[1,h*w*c])
+                result=sess.run('out:0', feed_dict={'i_p:0': img, 'k_p:0': 1.0})
+                result = np.reshape(result, [captcha_len,charset_len])
+                return self.__vec2text(result)
 
 class NullDataException(Exception):
     pass
