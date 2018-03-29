@@ -260,7 +260,6 @@ class Code_tool:
         def max_pool_2x2(x):
             return tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
 
-
         h = conv2(img_b, [3, 3, self.channel, 32])
         h = tf.nn.relu(h)
         h = max_pool_2x2(h)
@@ -276,7 +275,6 @@ class Code_tool:
         h = max_pool_2x2(h)
         h = tf.nn.dropout(h, keed)
         print(h.get_shape())
-
 
         shape = h.get_shape().as_list()
         w_f1 = tf.Variable(w_alpha * tf.truncated_normal([shape[1] * shape[2] * shape[3], 1024]))
