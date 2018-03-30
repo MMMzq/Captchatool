@@ -6,7 +6,7 @@ import traceback
 import tensorflow as tf
 import threading
 
-
+from io import BytesIO,StringIO
 
 lock = threading.Lock()
 '''
@@ -67,7 +67,6 @@ class Code_tool:
             self.__fnl = os.listdir(self.__input_path)
             fn=self.__input_path + self.__fnl[0]
             img = Image.open(fn)
-            self.format=img.format
             # 获取图片形状
             shape = np.array(img).shape
             self.height = shape[0]
@@ -245,7 +244,6 @@ class Code_tool:
         tf.constant(self.channel,name='channel')
         tf.constant(self.__max_captcha_len,name='captcha_len')
         tf.constant(self.__charset_len,name='charset_len')
-        tf.constant(self.format,name='format',dtype=tf.string)
         img_b = tf.placeholder(tf.float32, [None, self.height * self.width * self.channel],name='i_p')
         label_b = tf.placeholder(tf.float32, name='l_p')
         keed = tf.placeholder(tf.float32, name='k_p')
@@ -362,33 +360,24 @@ class Code_tool:
             lock.release()
         return self.sess
 
-    def infer(self,fn):
+    def infer_file(self,fn):
+        return self.__do_infer(fn)
+
+    def infer_bytes(self, b):
+        return self.__do_infer(BytesIO(b))
+
+    def infer_String(self,string):
+        return self.__do_infer(StringIO(string))
+
+    def __do_infer(self,x):
         sess=self.__init_session()
         h,w,c,captcha_len,charset_len=sess.run(['height:0','width:0','channel:0','captcha_len:0','charset_len:0'])
-        with Image.open(fn) as f:
-            img_array = np.array(f)
+        with Image.open(x) as img:
+            img_array = np.array(img)
             img = np.reshape(img_array,[1,h*w*c])
             result=sess.run('out:0', feed_dict={'i_p:0': img, 'k_p:0': 1.0})
             result = np.reshape(result, [captcha_len,charset_len])
             return self.__vec2text(result)
-
-    def infet_bytes(self, bytes):
-        sess=self.__init_session()
-        h,w,c,captcha_len,charset_len,format=sess.run(['height:0','width:0','channel:0','captcha_len:0','charset_len:0','format:0'])
-        # 这里format是一个bytes对象所以要转换
-        format=str(format,encoding='utf-8')
-        if format =='PNG':
-            decode=tf.image.decode_png(bytes, c)
-        elif format == 'JPEG':
-            decode=tf.image.decode_jpeg(bytes,c)
-        else:
-            raise  TypeError('不支持的格式,请切换别的方法')
-        result=sess.run(decode)
-        img_array = np.array(result)
-        img = np.reshape(img_array,[1,h*w*c])
-        result=sess.run('out:0', feed_dict={'i_p:0': img, 'k_p:0': 1.0})
-        result = np.reshape(result, [captcha_len,charset_len])
-        return self.__vec2text(result)
 
 class NullDataException(Exception):
     pass

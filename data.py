@@ -1,6 +1,8 @@
 # import requests
 # import commod
 # import os
+from io import BytesIO
+import numpy as np
 import random
 
 import os
@@ -60,6 +62,18 @@ def resgif(fn):
         img.rotate(3,expand=False).save('static/pojie/train/'+str(random.randint(1,20000))+'_'+code+'.png')
         img.rotate(-3,expand=False).save('static/pojie/train/'+str(random.randint(1,20000))+'_'+code+'.png')
 
-path='static/gif/'
-for fn in os.listdir(path):
-    resgif(path+fn)
+# path='static/gif/'
+# for fn in os.listdir(path):
+#     resgif(path+fn)
+# with Image.open('static/gif/64_NPQZ') as img:
+#     print(img.format)
+#     img.seek(15)
+#     img=img.convert("L")
+#     img=np.array(img)
+#     print(len(img.tobytes()))
+#     print(img.size)
+n=open('static/pojie/test/1203_mguw.png','rb').read()
+# img=Image.frombytes('L',(128,48),n)
+img=Image.open(BytesIO(n))
+img.show()
+print(img.size)
