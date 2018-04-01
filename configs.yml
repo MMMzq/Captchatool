@@ -1,5 +1,0 @@
-index: {original: 845, png: 845 }
-path:
-  png:  'E:/M_code/venv/Include/static/png/'
-  data: {test: 'E:/M_code/venv/Include/static/data/train/', train: 'E:/M_code/venv/Include/static/data/train/'}
-  original: 'E:/M_code/venv/Include/static/original/'
