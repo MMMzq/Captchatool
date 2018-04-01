@@ -411,7 +411,7 @@ class Code_tool:
                 loss, _ = sess.run(['loss:0', 'train'],
                                    feed_dict={'i_p:0': img, 'l_p:0': label, 'k_p:0': keep_prob})
                 print('步数为：{}\tloss:{}'.format(step, loss))
-                if step % 100 == 0:
+                if step % 50 == 0:
                     test_img, test_label = self.__test_queue.get()
                     # 这里的命中率是针对单个字符的不代表真正的命中率
                     actual_ac = sess.run('accuracy:0',
