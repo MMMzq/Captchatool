@@ -98,9 +98,9 @@ def demo5():
 
 # 取消注释来运行其他demo
 if __name__ == '__main__':
-    # demo1()
+    demo1()
     # demo2()
-    demo3()
+    # demo3()
     # demo4()
     # demo5()
     pass
