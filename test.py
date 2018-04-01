@@ -13,6 +13,6 @@ ct = Code_tool(s,
                'static/output/',
                label_resolve_func=lambda s: s.split('_')[1].split('.')[0])
 # ct.train(30,0.0001)
-t=ct.infer('static/data/train/1_0_2.png')
+t=ct.infer_file('static/data/train/1_0_2.png')
 print(t)
 
