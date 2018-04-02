@@ -386,7 +386,7 @@ class Code_tool:
         retrain:    True表示重新训练,False表示导入self.__model_path路径下最近更新的一个模型继续训练
         keep_prob:  即tf.nn.dropout(x, keep_prob)的第二个参数,该参数在测试集测试时将不会生效
     '''
-    def train(self, epochs, target_ac=1.,keep_prob=1.,retrain=True):
+    def train(self, epochs=10, target_ac=1.,keep_prob=1.,retrain=True):
         if self.__input_path is None or self.__test_input_path is None:
             print('__input_path或__test_input_path缺失')
             return
