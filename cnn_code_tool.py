@@ -331,49 +331,46 @@ class Code_tool:
         b_alpha =0.1
 
         # 定义模型
-        def conv2(input, ksize, padding='SAME'):
-            w = tf.Variable(w_alpha * tf.random_normal(ksize),name='weight')
-            b = tf.Variable(b_alpha * tf.random_normal([ksize[3]]),name='bais')
-            return tf.nn.bias_add(tf.nn.conv2d(input, w, strides=[1, 1, 1, 1], padding=padding), b)
+        def conv2(input, ksize,w_name=None,b_name=None,return_name=None, padding='SAME'):
+            w = tf.Variable(w_alpha * tf.random_normal(ksize),name=w_name)
+            b = tf.Variable(b_alpha * tf.random_normal([ksize[3]]),name=b_name)
+            return tf.nn.bias_add(tf.nn.conv2d(input, w, strides=[1, 1, 1, 1], padding=padding), b,name=return_name)
         def max_pool_2x2(x):
             return tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
 
-        h = conv2(img_b, [3, 3, self.__channel, 32])
+        # 卷积层,下面同理
+        h = conv2(img_b, [3, 3, self.__channel, 32],'weight','bais')
         h = tf.nn.relu(h)
         h = max_pool_2x2(h)
         h = tf.nn.dropout(h, keed)
 
-        h = conv2(h, [3, 3, 32, 64])
+        h = conv2(h, [3, 3, 32, 64],'weight','bais')
         h = tf.nn.relu(h)
         h = max_pool_2x2(h)
         h = tf.nn.dropout(h, keed)
 
-        h = conv2(h, [3, 3, 64, 64])
+        h = conv2(h, [3, 3, 64, 64],'weight','bais')
         h = tf.nn.relu(h)
         h = max_pool_2x2(h)
         h = tf.nn.dropout(h, keed)
 
+        # 全连接层
         shape = h.get_shape().as_list()
-        w_f1 = tf.Variable(w_alpha * tf.truncated_normal([shape[1] * shape[2] * shape[3], 1024]),name='fc_weight')
-        b_f1 = tf.Variable(b_alpha * tf.truncated_normal([1024]),name='fc_bais')
-        dense = tf.reshape(h, [-1, w_f1.get_shape().as_list()[0]])
-        dense = tf.add(tf.matmul(dense, w_f1), b_f1)
+        dense=conv2(h,[shape[1] , shape[2] , shape[3],1024],'fc_weight','fc_bais',padding='VALID')
         dense = tf.nn.relu(dense)
         dense = tf.nn.dropout(dense, keed)
 
-        w_out = tf.Variable(
-            w_alpha * tf.truncated_normal([1024, self.__max_captcha_len * self.__charset_len]),name='out_weight')
-        b_out = tf.Variable(
-            b_alpha * tf.truncated_normal([self.__max_captcha_len * self.__charset_len]),name='out_bais')
-        out = tf.add(tf.matmul(dense, w_out), b_out, 'out')
+        # 输出层
+        out=conv2(dense,[1,1,1024,self.__max_captcha_len * self.__charset_len],'out_weight','out_bais',return_name='out')
+        out=tf.reshape(out,[-1,self.__max_captcha_len * self.__charset_len])
 
         #   定义操作
         loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=label_b, logits=out),
                               name='loss')
         train_op = tf.train.AdamOptimizer().minimize(loss, name='train')
         predict = tf.reshape(out, [-1, self.__max_captcha_len, self.__charset_len])
-        max_logits_indexs = tf.argmax(predict, 2, 'max')
         label_b = tf.reshape(label_b, [-1, self.__max_captcha_len, self.__charset_len])
+        max_logits_indexs = tf.argmax(predict, 2)
         max_label_indexs = tf.argmax(label_b, 2)
         correct_pred = tf.equal(max_label_indexs, max_logits_indexs)
         accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32), name='accuracy')
