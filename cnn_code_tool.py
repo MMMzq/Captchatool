@@ -322,8 +322,8 @@ class Code_tool:
         tf.constant(self.__charset_len,name='charset_len')
 
         # 定义占位符，变量,常量
-        img_b = tf.placeholder(tf.float32, [None, self.__height * self.__width * self.__channel], name='i_p')
-        label_b = tf.placeholder(tf.float32, name='l_p')
+        img_b = tf.placeholder(tf.float32, [None, self.__height * self.__width * self.__channel], name='img_p')
+        label_b = tf.placeholder(tf.float32, name='label_p')
         keed = tf.placeholder(tf.float32, name='k_p')
         global_step = tf.Variable(0, name='g_v')
         img_b = tf.reshape(img_b, shape=[-1, self.__height, self.__width, self.__channel])
@@ -332,8 +332,8 @@ class Code_tool:
 
         # 定义模型
         def conv2(input, ksize, padding='SAME'):
-            w = tf.Variable(w_alpha * tf.random_normal(ksize))
-            b = tf.Variable(b_alpha * tf.random_normal([ksize[3]]))
+            w = tf.Variable(w_alpha * tf.random_normal(ksize),name='weight')
+            b = tf.Variable(b_alpha * tf.random_normal([ksize[3]]),name='bais')
             return tf.nn.bias_add(tf.nn.conv2d(input, w, strides=[1, 1, 1, 1], padding=padding), b)
         def max_pool_2x2(x):
             return tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
@@ -354,17 +354,17 @@ class Code_tool:
         h = tf.nn.dropout(h, keed)
 
         shape = h.get_shape().as_list()
-        w_f1 = tf.Variable(w_alpha * tf.truncated_normal([shape[1] * shape[2] * shape[3], 1024]))
-        b_f1 = tf.Variable(b_alpha * tf.truncated_normal([1024]))
+        w_f1 = tf.Variable(w_alpha * tf.truncated_normal([shape[1] * shape[2] * shape[3], 1024]),name='fc_weight')
+        b_f1 = tf.Variable(b_alpha * tf.truncated_normal([1024]),name='fc_bais')
         dense = tf.reshape(h, [-1, w_f1.get_shape().as_list()[0]])
         dense = tf.add(tf.matmul(dense, w_f1), b_f1)
         dense = tf.nn.relu(dense)
         dense = tf.nn.dropout(dense, keed)
 
         w_out = tf.Variable(
-            w_alpha * tf.truncated_normal([1024, self.__max_captcha_len * self.__charset_len]))
+            w_alpha * tf.truncated_normal([1024, self.__max_captcha_len * self.__charset_len]),name='out_weight')
         b_out = tf.Variable(
-            b_alpha * tf.truncated_normal([self.__max_captcha_len * self.__charset_len]))
+            b_alpha * tf.truncated_normal([self.__max_captcha_len * self.__charset_len]),name='out_bais')
         out = tf.add(tf.matmul(dense, w_out), b_out, 'out')
 
         #   定义操作
@@ -410,19 +410,20 @@ class Code_tool:
                 except NullDataException:
                     break
                 loss, _ = sess.run(['loss:0', 'train'],
-                                   feed_dict={'i_p:0': img, 'l_p:0': label, 'k_p:0': keep_prob})
+                                   feed_dict={'img_p:0': img, 'label_p:0': label, 'k_p:0': keep_prob})
                 print('步数为：{}\tloss:{}'.format(step, loss))
                 if step % 50 == 0:
                     test_img, test_label = self.__test_queue.get()
                     # 这里的命中率是针对单个字符的不代表真正的命中率
                     actual_ac = sess.run('accuracy:0',
-                                         feed_dict={'i_p:0': test_img, 'l_p:0': test_label,
+                                         feed_dict={'img_p:0': test_img, 'label_p:0': test_label,
                                                     'k_p:0': 1.})
                     print('步数为：{}--------------------------------------命中率:{}'.format(step, actual_ac))
                     if actual_ac >= target_ac:
                         break
                 step += 1
             # 保存
+            tf.summary.FileWriter(self.__model_path, sess.graph)
             g_step = tf.get_default_graph().get_tensor_by_name('g_v:0')
             tf.assign(g_step, step, name='update')
             sess.run('update:0')
@@ -479,7 +480,7 @@ class Code_tool:
         with Image.open(x) as img:
             img_array = np.array(img)
             img = np.reshape(img_array,[1,h*w*c])
-            result=sess.run('out:0', feed_dict={'i_p:0': img, 'k_p:0': 1.0})
+            result=sess.run('out:0', feed_dict={'img_p:0': img, 'k_p:0': 1.0})
             result = np.reshape(result, [captcha_len,charset_len])
             return self.__vec2text(result)
 
