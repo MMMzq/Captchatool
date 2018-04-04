@@ -15,9 +15,10 @@ from io import BytesIO,StringIO
     其实，输入的图片宽度和高度越大，到全连接层的shape就会越大，
     所以想要模型变小，就要尽量减小输入到全连接层shape的大小，或者取消全连接层。
     又或者是增加层数来下采样减小到输入到全连接层shape的大小
-3.请确保训练集和测试集数据的宽度，高度，通道数保持一致
+3.请确保训练集和测试集数据的宽度,高度,通道数,格式保持一致
 4.强烈建议安装tensorflow-gpu版本
 5.如果验证长度不定,可以用不在验证码字符集一个的字符来补全到最大验证码长度
+6.如果有什么问题可以在 https://github.com/MMMzq/Captchatool 提出issues
 '''
 lock = threading.Lock()
 class Code_tool:
@@ -80,7 +81,7 @@ class Code_tool:
     '''
 
     def __init__(self, charset, model_path, input_path=None, test_input_path=None,
-                 label_resolve_func=None, batch_size=64, test_batch_size=256,
+                 label_resolve_func=None, batch_size=64, test_batch_size=128,
                  max_thread_size=16, batch_multiple=4, data_handle_n=3):
         self.__model_path = model_path
         self.__charset = charset

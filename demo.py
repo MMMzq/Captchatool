@@ -97,6 +97,7 @@ def demo5():
 
 
 # 取消注释来运行其他demo
+# 第一次运行会创建数据,可能比较久
 if __name__ == '__main__':
     demo1()
     # demo2()
