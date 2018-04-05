@@ -436,9 +436,9 @@ class Code_tool:
             cp = tf.train.latest_checkpoint(self.__model_path)
             save = tf.train.import_meta_graph(cp + '.meta')
             save.restore(self.__sess, cp)
+            self.__h,self.__w,self.__c,self.__cap_len,self.__cs_len=self.__sess.run(['height:0','width:0','channel:0','captcha_len:0','charset_len:0'])
             self.__isinit = True
             lock.release()
-        return self.__sess
 
     '''
     Note:   从文件读取图片并用模型推测验证码
@@ -469,13 +469,12 @@ class Code_tool:
 
     def __do_infer(self,x):
         # session只会初始化一次
-        sess=self.__init_session()
-        h,w,c,captcha_len,charset_len=sess.run(['height:0','width:0','channel:0','captcha_len:0','charset_len:0'])
+        self.__init_session()
         with Image.open(x) as img:
             img_array = np.array(img)
-            img = np.reshape(img_array,[1,h*w*c])
-            result=sess.run('out:0', feed_dict={'img_p:0': img, 'k_p:0': 1.0})
-            result=np.reshape(result,[captcha_len,charset_len])
+            img = np.reshape(img_array,[1,self.__h*self.__w*self.__c])
+            result=self.__sess.run('out:0', feed_dict={'img_p:0': img, 'k_p:0': 1.0})
+            result=np.reshape(result,[self.__cap_len,self.__cs_len])
         return self.__vec2text(result)
 
 class NullDataException(Exception):
