@@ -236,7 +236,7 @@ class Code_tool:
     Note:   通用方法
     '''
     def __do_add_data_queue(self, batch_img, batch_label):
-        batch_label = np.reshape(batch_label, [-1, self.__max_captcha_len * self.__charset_len])
+        batch_label = np.reshape(batch_label, [-1, self.__max_captcha_len , self.__charset_len])
         batch_img = np.reshape(batch_img, [-1, self.__height * self.__width * self.__channel])
         self.__data_queue.put({'batch_img': batch_img, 'batch_label': batch_label}, )
 
@@ -275,7 +275,7 @@ class Code_tool:
                 label_raw = self.__text2vec(fn)
                 batch_img = np.append(batch_img, img_raw)
                 batch_label = np.append(batch_label, label_raw)
-        batch_label = np.reshape(batch_label, [-1, self.__max_captcha_len * self.__charset_len])
+        batch_label = np.reshape(batch_label, [-1, self.__max_captcha_len , self.__charset_len])
         batch_img = np.reshape(batch_img, [-1, self.__height * self.__width * self.__channel])
         return batch_img, batch_label
 
@@ -331,10 +331,10 @@ class Code_tool:
         b_alpha =0.1
 
         # 定义模型
-        def conv2(input, ksize,w_name=None,b_name=None,return_name=None, padding='SAME'):
+        def conv2(input, ksize,w_name=None,b_name=None, padding='SAME'):
             w = tf.Variable(w_alpha * tf.random_normal(ksize),name=w_name)
             b = tf.Variable(b_alpha * tf.random_normal([ksize[3]]),name=b_name)
-            return tf.nn.bias_add(tf.nn.conv2d(input, w, strides=[1, 1, 1, 1], padding=padding), b,name=return_name)
+            return tf.nn.bias_add(tf.nn.conv2d(input, w, strides=[1, 1, 1, 1], padding=padding), b)
         def max_pool_2x2(x):
             return tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
 
@@ -361,20 +361,17 @@ class Code_tool:
         dense = tf.nn.dropout(dense, keed)
 
         # 输出层
-        out=conv2(dense,[1,1,1024,self.__max_captcha_len * self.__charset_len],'out_weight','out_bais',return_name='out')
-        out=tf.reshape(out,[-1,self.__max_captcha_len * self.__charset_len])
+        out=conv2(dense,[1,1,1024,self.__max_captcha_len * self.__charset_len],'out_weight','out_bais')
+        out=tf.reshape(out,[-1,self.__max_captcha_len,self.__charset_len],name='out')
 
         #   定义操作
         loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=label_b, logits=out),
                               name='loss')
         train_op = tf.train.AdamOptimizer().minimize(loss, name='train')
-        predict = tf.reshape(out, [-1, self.__max_captcha_len, self.__charset_len])
-        label_b = tf.reshape(label_b, [-1, self.__max_captcha_len, self.__charset_len])
-        max_logits_indexs = tf.argmax(predict, 2)
+        max_logits_indexs = tf.argmax(out, 2)
         max_label_indexs = tf.argmax(label_b, 2)
         correct_pred = tf.equal(max_label_indexs, max_logits_indexs)
         accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32), name='accuracy')
-
 
     '''
     Note: 该方法请不要在多线程环境运行,请确保同一时间内只有一个线程运行该方法
@@ -478,8 +475,8 @@ class Code_tool:
             img_array = np.array(img)
             img = np.reshape(img_array,[1,h*w*c])
             result=sess.run('out:0', feed_dict={'img_p:0': img, 'k_p:0': 1.0})
-            result = np.reshape(result, [captcha_len,charset_len])
-            return self.__vec2text(result)
+            result=np.reshape(result,[captcha_len,charset_len])
+        return self.__vec2text(result)
 
 class NullDataException(Exception):
     pass
