@@ -9,12 +9,13 @@ import threading
 from io import BytesIO,StringIO
 
 '''
-1.通常loss，和命中率是负相关的，loss降低一般意味着的命中率的提升！
-2.在相同的模型中条件下，模型的大小，实际很大程度取决于图片的大小，和输入到全连接处时shape的大小，
+1.在相同的模型中条件下，模型的大小，实际很大程度取决于图片的大小，和输入到全连接处时shape的大小，
     例如输入到全连接层shape为(batch_size,15,40,1)和(batch_size,8,20,1),后者的模型可能将会比前者小3/2
     其实，输入的图片宽度和高度越大，到全连接层的shape就会越大，
     所以想要模型变小，就要尽量减小输入到全连接层shape的大小，或者取消全连接层。
     又或者是增加层数来下采样减小到输入到全连接层shape的大小
+    一个很好的例子:就是你可以对比一下demo1和demo3最后生成模型的大小
+2.通常loss，和命中率是负相关的，loss降低一般意味着的命中率的提升！
 3.请确保训练集和测试集数据的宽度,高度,通道数,格式保持一致
 4.强烈建议安装tensorflow-gpu版本
 5.如果验证长度不定,可以用不在验证码字符集一个的字符来补全到最大验证码长度
@@ -332,9 +333,9 @@ class Code_tool:
 
         # 定义模型
         def conv2(input, ksize,w_name=None,b_name=None, padding='SAME'):
-            w = tf.Variable(w_alpha * tf.random_normal(ksize),name=w_name)
-            b = tf.Variable(b_alpha * tf.random_normal([ksize[3]]),name=b_name)
-            return tf.nn.bias_add(tf.nn.conv2d(input, w, strides=[1, 1, 1, 1], padding=padding), b)
+            weight = tf.Variable(w_alpha * tf.random_normal(ksize),name=w_name)
+            bais = tf.Variable(b_alpha * tf.random_normal([ksize[3]]),name=b_name)
+            return tf.nn.bias_add(tf.nn.conv2d(input, weight, strides=[1, 1, 1, 1], padding=padding), bais)
         def max_pool_2x2(x):
             return tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
 
@@ -365,19 +366,16 @@ class Code_tool:
         out=tf.reshape(out,[-1,self.__max_captcha_len,self.__charset_len],name='out')
 
         #   定义操作
-        loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=label_b, logits=out),
-                              name='loss')
+        loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=label_b, logits=out),name='loss')
         train_op = tf.train.AdamOptimizer().minimize(loss, name='train')
-        max_logits_indexs = tf.argmax(out, 2)
-        max_label_indexs = tf.argmax(label_b, 2)
-        correct_pred = tf.equal(max_label_indexs, max_logits_indexs)
+        correct_pred = tf.equal(tf.argmax(out, 2), tf.argmax(label_b, 2))
         accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32), name='accuracy')
 
     '''
     Note: 该方法请不要在多线程环境运行,请确保同一时间内只有一个线程运行该方法
     参数:
         epochs:训练集迭代次数
-        target_ac:  target_ac目标命中率,当模型达到该命中率,且不管是否达到迭代次数都会退出训练
+        target_ac:  target_ac目标命中率,当模型达到该命中率时不管是否达到迭代次数都会退出训练
         retrain:    True表示重新训练,False表示导入self.__model_path路径下最近更新的一个模型继续训练
         keep_prob:  即tf.nn.dropout(x, keep_prob)的第二个参数,该参数在测试集测试时将不会生效
     '''
