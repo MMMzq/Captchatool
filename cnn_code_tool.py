@@ -20,6 +20,7 @@ from io import BytesIO,StringIO
 4.强烈建议安装tensorflow-gpu版本
 5.如果验证长度不定,可以用不在验证码字符集一个的字符来补全到最大验证码长度
 6.如果有什么问题可以在 https://github.com/MMMzq/Captchatool 提出issues
+7.更多说明请在http://www.izhuanyer.com/2018/04/02/Captchatool 查看
 '''
 lock = threading.Lock()
 class Code_tool:
@@ -281,7 +282,7 @@ class Code_tool:
         return batch_img, batch_label
 
     '''
-    Note:   文本转向量
+    Note:   采用one-hot编码将文本转向量
     参数:
         text:    一个str对象,请确保text的字符在self.__charset里有
     return: 返回一个numpy对象
@@ -294,7 +295,7 @@ class Code_tool:
         vec = vec.flatten()
         return vec
     '''
-    Note:   向量转文本
+    Note:   将one-hot编码的向量转文本
     参数:
         vec:    一个numpy对象,其中vec.shape要等于[captcha_len,charset_len],否则会错误
     return: 返回文本,即验证码
