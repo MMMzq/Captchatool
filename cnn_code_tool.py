@@ -429,15 +429,15 @@ class Code_tool:
     Note:   持久化tensorlfow.Session对象,防止用模型推测时反复打开关闭session,导致浪费资源
     '''
     def __init_session(self):
+        lock.acquire()
         if not self.__isinit:
-            lock.acquire()
             self.__sess=tf.Session()
             cp = tf.train.latest_checkpoint(self.__model_path)
             save = tf.train.import_meta_graph(cp + '.meta')
             save.restore(self.__sess, cp)
             self.__h,self.__w,self.__c,self.__cap_len,self.__cs_len=self.__sess.run(['height:0','width:0','channel:0','captcha_len:0','charset_len:0'])
             self.__isinit = True
-            lock.release()
+        lock.release()
 
     '''
     Note:   从文件读取图片并用模型推测验证码
@@ -468,7 +468,8 @@ class Code_tool:
 
     def __do_infer(self,x):
         # session只会初始化一次
-        self.__init_session()
+        if not self.__isinit:
+            self.__init_session()
         with Image.open(x) as img:
             img_array = np.array(img)
             img = np.reshape(img_array,[1,self.__h*self.__w*self.__c])
