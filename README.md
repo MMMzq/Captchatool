@@ -40,4 +40,4 @@
         print(captcha) # 打印模型推测的验证码
     ```
 * **值得注意的是推测的图片要和模型训练时的图片的宽度,高度,通道,格式要完全一致**
-* 更多详尽说明[点击跳转](http://www.izhuanyer.com/2018/04/02/Captchatool/)
+* 更多详尽说明[点击跳转](https://www.jianshu.com/p/354eb20942ea)
